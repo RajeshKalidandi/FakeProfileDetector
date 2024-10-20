@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from typing import Dict, List
 from sqlalchemy import Column, Integer, Float, String, JSON, DateTime, Index
 from sqlalchemy.ext.declarative import declarative_base
+from services.encryption_service import encryption_service
 
 load_dotenv()
 
@@ -81,6 +82,14 @@ class User(Base):
     @property
     def id(self):
         return str(self._id)
+
+    @property
+    def email(self):
+        return encryption_service.decrypt(self._email)
+    
+    @email.setter
+    def email(self, value):
+        self._email = encryption_service.encrypt(value)
 
     def save(self):
         if not self._id:

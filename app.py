@@ -27,6 +27,17 @@ from datetime import datetime
 from ml_models.continuous_learning import continuous_learner
 import threading
 import asyncio
+from fastapi_limiter import FastAPILimiter
+from fastapi_limiter.depends import RateLimiter
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from datetime import datetime, timedelta
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+import redis
+from services.logging_service import logging_service
+from services.monitoring_service import monitoring_service
+from apscheduler.schedulers.background import BackgroundScheduler
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -45,20 +56,101 @@ app = FastAPI()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 security = HTTPBearer()
 
+# Setup rate limiting
+redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+redis = redis.from_url(redis_url)
+FastAPILimiter.init(redis)
+
+# Setup password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Setup JWT token
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# User model
+class User(BaseModel):
+    username: str
+    email: EmailStr
+    disabled: Optional[bool] = None
+
+class UserInDB(User):
+    hashed_password: str
+
+# Token model
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+# Password hashing functions
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+# JWT token functions
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+    user = get_user(username=token_data.username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+async def get_current_active_user(current_user: User = Depends(get_current_user)):
+    if current_user.disabled:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+# Authentication routes
+@app.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+# Apply rate limiting to all routes
 @app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    if not rate_limiter.check_rate_limit(request):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+async def add_rate_limit_to_all_routes(request: Request, call_next):
+    limiter = RateLimiter(times=100, hours=1)  # 100 requests per hour
+    await limiter(request)
     response = await call_next(request)
     return response
-
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserInDB:
-    user = User.verify_token(token)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    user_dict = user.to_dict()
-    user_dict['id'] = str(user_dict.pop('_id'))  # Convert ObjectId to string
-    return UserInDB(**user_dict)
 
 async def get_current_user_credentials(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
@@ -128,7 +220,8 @@ async def get_current_user_info(current_user: UserInDB = Depends(get_current_use
 async def analyze_profile(
     profile_data: str = Form(...),
     profile_pictures: List[UploadFile] = File(None),
-    current_user: UserInDB = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user),
+    limiter: RateLimiter = Depends(RateLimiter(times=10, minutes=1))  # 10 requests per minute
 ):
     if not freemium_service.check_scan_limit(current_user):
         raise HTTPException(status_code=403, detail="Daily scan limit reached")
@@ -170,6 +263,14 @@ async def analyze_profile(
         "features": features,
         "created_at": datetime.utcnow()
     }
+
+    # Log the prediction
+    logging_service.log_prediction(
+        analysis_result["user_id"],
+        analysis_result["profile_url"],
+        analysis_result["result"],
+        analysis_result["confidence"]
+    )
 
     # Store the analysis result in the analyses collection
     analyses_collection.insert_one(analysis_result)
@@ -376,6 +477,18 @@ async def start_ab_test(test_duration_hours: int, current_user: UserInDB = Depen
     
     return {"message": f"A/B test started for {test_duration_hours} hours"}
 
+@app.get("/api/admin/monitoring/performance")
+async def get_system_performance(days: int = 7, current_user: User = Depends(get_current_active_user)):
+    if not user_service.is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return monitoring_service.get_system_performance(days)
+
+@app.get("/api/admin/monitoring/daily-analysis")
+async def get_daily_analysis_count(days: int = 30, current_user: User = Depends(get_current_active_user)):
+    if not user_service.is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return monitoring_service.get_daily_analysis_count(days)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
@@ -383,3 +496,7 @@ if __name__ == "__main__":
 # Add this at the end of the file
 retraining_thread = threading.Thread(target=continuous_learner.schedule_retraining)
 retraining_thread.start()
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(monitoring_service.check_for_anomalies, 'interval', hours=24)
+scheduler.start()

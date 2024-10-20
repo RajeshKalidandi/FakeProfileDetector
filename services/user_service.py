@@ -6,9 +6,12 @@ from pymongo import MongoClient
 from redis import Redis
 import pickle
 import json
+from passlib.context import CryptContext
 
 # Initialize Redis client
 redis_client = Redis(host='localhost', port=6379, db=1)
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def is_admin(user: User) -> bool:
     # Implement admin check logic
@@ -117,3 +120,12 @@ async def get_recent_analyses(user_id: str, limit: int = 5) -> List[dict]:
     redis_client.setex(cache_key, 60, pickle.dumps(result))
     
     return result
+
+def create_user(username: str, email: str, password: str) -> User:
+    hashed_password = pwd_context.hash(password)
+    user = User(username=username, email=email, password_hash=hashed_password)
+    user.save()
+    return user
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
