@@ -11,7 +11,7 @@ Fake Profile Detector is an AI-powered web application that helps users identify
 - Freemium model with daily scan limits
 - Admin panel for managing users and viewing overall statistics
 - Data collection from various social media platforms
-- Advanced text feature extraction for improved fake profile detection
+- Advanced text and image feature extraction for improved fake profile detection
 
 ## Tech Stack
 
@@ -28,9 +28,12 @@ Fake Profile Detector is an AI-powered web application that helps users identify
 - Firebase Admin SDK for authentication
 - Machine Learning models:
   - Scikit-learn for traditional ML algorithms
-  - NLTK and Gensim for NLP tasks
-  - SpaCy for Named Entity Recognition
+  - NLTK for NLP tasks
+  - Gensim for topic modeling
   - TextBlob for spelling checks
   - LanguageTool for grammar checks
+  - OpenCV for image processing
+  - Face Recognition for face detection
+  - TensorFlow/Keras for deep learning models
 
 ## Project Structure

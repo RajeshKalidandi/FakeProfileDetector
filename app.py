@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, Body, File, UploadFile, Form
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from backend.models.user import User
 from schemas import UserCreate, UserLogin, UserSchema, UserInDB
@@ -16,6 +16,9 @@ from fastapi.responses import JSONResponse
 from exceptions import AppError
 from ml_models import FakeProfileDetector, extract_features, preprocess_data, train_model
 from data_collection.collector import DataCollector
+from fastapi import UploadFile
+import json
+import shutil
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -87,9 +90,25 @@ async def get_current_user_info(current_user: UserInDB = Depends(get_current_use
 
 # Profile analysis endpoint
 @app.post("/api/analyze/profile")
-async def analyze_profile(profile_data: dict, current_user: UserInDB = Depends(get_current_user)):
+async def analyze_profile(
+    profile_data: str = Form(...),
+    profile_pictures: List[UploadFile] = File(None),
+    current_user: UserInDB = Depends(get_current_user)
+):
     if not freemium_service.check_scan_limit(current_user):
         raise HTTPException(status_code=403, detail="Daily scan limit reached")
+    
+    profile_data = json.loads(profile_data)
+    
+    # Save the uploaded images temporarily
+    temp_image_paths = []
+    if profile_pictures:
+        for picture in profile_pictures:
+            temp_image_path = f"temp_{picture.filename}"
+            with open(temp_image_path, "wb") as buffer:
+                shutil.copyfileobj(picture.file, buffer)
+            temp_image_paths.append(temp_image_path)
+        profile_data['profile_pictures'] = temp_image_paths
     
     features = extract_features(profile_data)
     model = FakeProfileDetector.load_model('trained_model.joblib')
@@ -101,6 +120,10 @@ async def analyze_profile(profile_data: dict, current_user: UserInDB = Depends(g
     probability = model.predict_proba([feature_list])[0][1]  # Probability of being a fake profile
 
     freemium_service.increment_scan_count(current_user)
+    
+    # Remove the temporary image files
+    for temp_path in temp_image_paths:
+        os.remove(temp_path)
     
     return {
         "result": "fake" if prediction == 1 else "genuine",

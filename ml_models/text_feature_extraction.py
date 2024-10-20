@@ -5,16 +5,9 @@ from gensim import corpora
 from gensim.models import LdaMulticore
 from gensim.parsing.preprocessing import STOPWORDS
 from gensim.utils import simple_preprocess
-import spacy
+import nltk
 from textblob import TextBlob
 import language_tool_python
-import nltk
-
-# Download necessary NLTK data
-nltk.download('vader_lexicon')
-
-# Initialize spaCy
-nlp = spacy.load("en_core_web_sm")
 
 # Initialize LanguageTool for grammar checking
 language_tool = language_tool_python.LanguageTool('en-US')
@@ -54,10 +47,13 @@ def extract_text_features(bio, posts):
         features[f'topic_{i}'] = max([topic[1] for topic in topics if topic[0] == i], default=0)
     
     # Named Entity Recognition
-    doc = nlp(all_text)
+    tokens = nltk.word_tokenize(all_text)
+    pos_tags = nltk.pos_tag(tokens)
+    named_entities = nltk.ne_chunk(pos_tags)
     ner_counts = {}
-    for ent in doc.ents:
-        ner_counts[ent.label_] = ner_counts.get(ent.label_, 0) + 1
+    for chunk in named_entities:
+        if hasattr(chunk, 'label'):
+            ner_counts[chunk.label()] = ner_counts.get(chunk.label(), 0) + 1
     features.update(ner_counts)
     
     # Spelling and Grammar Check
