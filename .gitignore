@@ -65,3 +65,5 @@ package-lock.json
 
 # Add this line to your existing .gitignore
 firebase-adminsdk.json
+
+.vercel
