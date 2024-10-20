@@ -2,6 +2,7 @@ from backend.models.user import User
 from typing import List
 from ml_models.network_feature_extraction import extract_network_features
 from ml_models.temporal_feature_extraction import extract_temporal_features
+from pymongo import MongoClient
 
 def is_admin(user: User) -> bool:
     # Implement admin check logic
@@ -75,3 +76,16 @@ def get_user_stats(user: User):
         "activity_variance": temporal_features['activity_variance'],
         "night_day_ratio": temporal_features['night_day_ratio'],
     }
+
+async def get_recent_analyses(user_id: str, limit: int = 5) -> List[dict]:
+    analyses = db.analyses.find({"user_id": user_id}).sort("created_at", -1).limit(limit)
+    
+    return [
+        {
+            "profile_url": analysis["profile_url"],
+            "result": analysis["result"],
+            "confidence": analysis["confidence"],
+            "created_at": analysis["created_at"]
+        }
+        for analysis in analyses
+    ]

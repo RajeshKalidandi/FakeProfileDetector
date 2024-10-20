@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Request, Body, File, UploadFile, Form
+from fastapi import FastAPI, Depends, HTTPException, Request, Body, File, UploadFile, Form, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from backend.models.user import User
 from schemas import UserCreate, UserLogin, UserSchema, UserInDB
@@ -19,6 +19,11 @@ from data_collection.collector import DataCollector
 from fastapi import UploadFile
 import json
 import shutil
+import pickle
+import hashlib
+from redis import Redis
+from pymongo import MongoClient
+from datetime import datetime
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -59,6 +64,33 @@ async def get_current_user_credentials(credentials: HTTPAuthorizationCredentials
         return decoded_token
     except:
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+# Initialize Redis client
+redis_client = Redis(host='localhost', port=6379, db=0)
+
+# Initialize MongoDB client
+mongo_client = MongoClient(os.getenv('MONGODB_URI'))
+db = mongo_client['fake_profile_detector']
+users_collection = db['users']
+analyses_collection = db['analyses']  # New collection for storing analysis results
+
+# Helper function to generate a unique key for a profile
+def generate_profile_key(profile_data):
+    return hashlib.md5(json.dumps(profile_data, sort_keys=True).encode()).hexdigest()
+
+# Background task to update cache
+def update_cache(profile_key, analysis_result):
+    redis_client.setex(profile_key, 3600, pickle.dumps(analysis_result))  # Cache for 1 hour
+
+# Add this function to initialize the analyses collection
+def init_analyses_collection():
+    if 'analyses' not in db.list_collection_names():
+        db.create_collection('analyses')
+        analyses_collection.create_index([('user_id', 1), ('created_at', -1)])
+        print("Analyses collection created and indexed.")
+
+# Call this function when the app starts
+init_analyses_collection()
 
 # Authentication endpoints
 @app.post("/api/auth/register", response_model=UserSchema)
@@ -122,11 +154,22 @@ async def analyze_profile(
     features = extract_features(profile_data)
     model = FakeProfileDetector.load_model('trained_model.joblib')
     
-    # Convert features dict to list in the correct order
     feature_list = [features[f] for f in model.feature_names_]
     
     prediction = model.predict([feature_list])[0]
-    probability = model.predict_proba([feature_list])[0][1]  # Probability of being a fake profile
+    probability = model.predict_proba([feature_list])[0][1]
+
+    analysis_result = {
+        "user_id": str(current_user.id),
+        "profile_url": profile_data.get('profile_url', ''),
+        "result": "fake" if prediction == 1 else "genuine",
+        "confidence": float(probability),
+        "features": features,
+        "created_at": datetime.utcnow()
+    }
+
+    # Store the analysis result in the analyses collection
+    analyses_collection.insert_one(analysis_result)
 
     freemium_service.increment_scan_count(current_user)
     
@@ -135,10 +178,54 @@ async def analyze_profile(
         os.remove(temp_path)
     
     return {
+        "result": analysis_result["result"],
+        "confidence": analysis_result["confidence"],
+        "features": analysis_result["features"]
+    }
+
+# Real-time profile analysis endpoint
+@app.post("/api/analyze/profile/realtime")
+async def analyze_profile_realtime(
+    profile_data: dict = Body(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    if not freemium_service.check_scan_limit(current_user):
+        raise HTTPException(status_code=403, detail="Daily scan limit reached")
+    
+    profile_key = generate_profile_key(profile_data)
+    
+    # Check if the analysis result is in cache
+    cached_result = redis_client.get(profile_key)
+    if cached_result:
+        return pickle.loads(cached_result)
+    
+    features = extract_features(profile_data)
+    model = FakeProfileDetector.load_model('trained_model.joblib')
+    
+    feature_list = [features[f] for f in model.feature_names_]
+    
+    prediction = model.predict([feature_list])[0]
+    probability = model.predict_proba([feature_list])[0][1]
+    
+    analysis_result = {
+        "user_id": str(current_user.id),
+        "profile_url": profile_data.get('profile_url', ''),
         "result": "fake" if prediction == 1 else "genuine",
         "confidence": float(probability),
-        "features": features
+        "features": features,
+        "created_at": datetime.utcnow()
     }
+
+    # Store the analysis result in the analyses collection
+    analyses_collection.insert_one(analysis_result)
+    
+    # Update cache in the background
+    background_tasks.add_task(update_cache, profile_key, analysis_result)
+    
+    freemium_service.increment_scan_count(current_user)
+    
+    return analysis_result
 
 # User contribution endpoint
 @app.post("/api/contribute")
@@ -249,6 +336,13 @@ async def app_error_handler(request: Request, exc: AppError):
         status_code=exc.status_code,
         content={"message": exc.message},
     )
+
+# Recent analyses endpoint
+@app.get("/api/recent-analyses")
+async def get_recent_analyses(current_user: UserInDB = Depends(get_current_user)):
+    # Fetch the 5 most recent analyses for the current user
+    recent_analyses = await user_service.get_recent_analyses(current_user.id, limit=5)
+    return recent_analyses
 
 if __name__ == "__main__":
     import uvicorn

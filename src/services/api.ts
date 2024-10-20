@@ -68,6 +68,12 @@ export const signInWithGoogle = async () => {
   }
 };
 
+export const analyzeProfileRealtime = (profileData: any) =>
+  api.post('/analyze/profile/realtime', profileData);
+
+export const getRecentAnalyses = (): Promise<{ data: RecentAnalysis[] }> => 
+  api.get('/recent-analyses');
+
 export default api;
 
 export interface UserStats {
@@ -89,4 +95,11 @@ export interface UserStats {
   postingFrequency: number;
   activityVariance: number;
   nightDayRatio: number;
+}
+
+export interface RecentAnalysis {
+  profile_url: string;
+  result: string;
+  confidence: number;
+  created_at: string;
 }

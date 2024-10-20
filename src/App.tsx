@@ -10,6 +10,7 @@ import LandingPage from './components/LandingPage';
 import NotFound from './components/NotFound';
 import ProfileAnalysis from './components/ProfileAnalysis';
 import HistoryReports from './components/HistoryReports';
+import FullRealTimeAnalysis from './components/FullRealTimeAnalysis';
 
 const App: React.FC = () => {
   return (
@@ -24,6 +25,7 @@ const App: React.FC = () => {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/profile-analysis" element={<ProfileAnalysis />} />
             <Route path="/history" element={<HistoryReports />} />
+            <Route path="/real-time-analysis" element={<FullRealTimeAnalysis />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

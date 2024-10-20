@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { BarChart, Users, AlertTriangle, Zap, Shield, Award, Network, Clock } from 'lucide-react';
+import { BarChart, Users, AlertTriangle, Zap, Shield, Award, Network, Clock, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Header from './Header';
 import AnalysisCard from './AnalysisCard';
@@ -8,7 +8,9 @@ import ContributionPanel from './ContributionPanel';
 import HistoryReports from './HistoryReports';
 import Notifications from './Notifications';
 import ErrorMessage from './ErrorMessage';
-import { getUserStats } from '../services/api';
+import RealTimeAnalysis from './RealTimeAnalysis';
+import { getUserStats, getRecentAnalyses } from '../services/api';
+import { Link } from 'react-router-dom';
 
 const Dashboard: React.FC = () => {
   const { currentUser } = useAuth();
@@ -33,6 +35,7 @@ const Dashboard: React.FC = () => {
     nightDayRatio: 0
   });
   const [error, setError] = useState<string | null>(null);
+  const [recentAnalyses, setRecentAnalyses] = useState([]);
 
   useEffect(() => {
     const fetchUserStats = async () => {
@@ -49,6 +52,19 @@ const Dashboard: React.FC = () => {
 
     fetchUserStats();
   }, [currentUser]);
+
+  useEffect(() => {
+    const fetchRecentAnalyses = async () => {
+      try {
+        const response = await getRecentAnalyses();
+        setRecentAnalyses(response.data);
+      } catch (error) {
+        console.error('Error fetching recent analyses:', error);
+      }
+    };
+
+    fetchRecentAnalyses();
+  }, []);
 
   if (!currentUser) {
     return (
@@ -191,6 +207,38 @@ const Dashboard: React.FC = () => {
               <p>{userStats.nightDayRatio.toFixed(2)}</p>
             </div>
           </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.8 }}
+          className="bg-white p-6 rounded-lg shadow-md mt-6"
+        >
+          <h2 className="text-2xl font-semibold mb-4">Recent Analyses</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recentAnalyses.map((analysis, index) => (
+              <div key={index} className="bg-gray-100 p-4 rounded-lg">
+                <p className="font-semibold">{analysis.profile_url}</p>
+                <p className={analysis.result === 'fake' ? 'text-red-500' : 'text-green-500'}>
+                  {analysis.result.charAt(0).toUpperCase() + analysis.result.slice(1)}
+                </p>
+                <p>Confidence: {(analysis.confidence * 100).toFixed(2)}%</p>
+              </div>
+            ))}
+          </div>
+          <Link to="/real-time-analysis" className="mt-4 inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+            Go to Real-Time Analysis
+          </Link>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.9 }}
+          className="mt-6"
+        >
+          <RealTimeAnalysis />
         </motion.div>
       </main>
     </div>
