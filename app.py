@@ -1,7 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException, Request, Body, File, UploadFile, Form, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, Request, Body, File, UploadFile, Form, BackgroundTasks, APIRouter
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from backend.models.user import User
-from schemas import UserCreate, UserLogin, UserSchema, UserInDB
+from schemas import UserCreate, UserLogin, UserSchema, UserInDB, ProfileSubmission, BatchProfileSubmission, FeedbackSubmission
 from services import freemium_service, user_service, auth_service, feature_toggle
 from services.rate_limiter import rate_limiter
 from typing import List
@@ -38,6 +38,7 @@ import redis
 from services.logging_service import logging_service
 from services.monitoring_service import monitoring_service
 from apscheduler.schedulers.background import BackgroundScheduler
+from background_jobs import start_background_jobs
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -167,7 +168,11 @@ redis_client = Redis(host='localhost', port=6379, db=0)
 mongo_client = MongoClient(os.getenv('MONGODB_URI'))
 db = mongo_client['fake_profile_detector']
 users_collection = db['users']
-analyses_collection = db['analyses']  # New collection for storing analysis results
+profiles_collection = db['profiles']
+analysis_results_collection = db['analysis_results']
+feedback_reports_collection = db['feedback_reports']
+model_versions_collection = db['model_versions']
+feature_importance_collection = db['feature_importance']
 
 # Helper function to generate a unique key for a profile
 def generate_profile_key(profile_data):
@@ -488,6 +493,200 @@ async def get_daily_analysis_count(days: int = 30, current_user: User = Depends(
     if not user_service.is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
     return monitoring_service.get_daily_analysis_count(days)
+
+# API versioning
+v1_router = APIRouter(prefix="/api/v1")
+
+# User registration and authentication
+@v1_router.post("/auth/register", response_model=UserSchema)
+async def register(user_data: UserCreate):
+    try:
+        user = auth_service.register_user(user_data.username, user_data.email, user_data.password)
+        if not user:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        user_dict = user.to_dict()
+        user_dict['id'] = str(user_dict['_id'])
+        del user_dict['_id']
+        return UserSchema(**user_dict)
+    except Exception as e:
+        logging_service.log_error(f"Registration error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+@v1_router.post("/auth/login", response_model=dict)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = auth_service.login_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(status_code=400, detail="Incorrect username/email or password")
+    access_token = User.generate_token(user['id'])
+    return {"access_token": access_token, "token_type": "bearer", "user": user}
+
+# Profile submission for analysis
+@v1_router.post("/analyze/profile")
+async def analyze_profile(
+    profile_data: ProfileSubmission,
+    current_user: UserInDB = Depends(get_current_user),
+    limiter: RateLimiter = Depends(RateLimiter(times=10, minutes=1))
+):
+    if not freemium_service.check_scan_limit(current_user):
+        raise HTTPException(status_code=403, detail="Daily scan limit reached")
+    
+    features = extract_features(profile_data.dict())
+    model = continuous_learner.current_model
+    
+    feature_list = [features[f] for f in model.feature_names_]
+    
+    prediction = model.predict([feature_list])[0]
+    probability = model.predict_proba([feature_list])[0][1]
+
+    analysis_result = {
+        "user_id": str(current_user.id),
+        "profile_url": profile_data.profile_url,
+        "result": "fake" if prediction == 1 else "genuine",
+        "confidence": float(probability),
+        "features": features,
+        "created_at": datetime.utcnow()
+    }
+
+    analyses_collection.insert_one(analysis_result)
+    logging_service.log_prediction(analysis_result["user_id"], analysis_result["profile_url"], analysis_result["result"], analysis_result["confidence"])
+    freemium_service.increment_scan_count(current_user)
+    
+    return analysis_result
+
+# Batch profile analysis
+@v1_router.post("/analyze/batch")
+async def analyze_batch_profiles(
+    batch_data: BatchProfileSubmission,
+    current_user: UserInDB = Depends(get_current_user),
+    limiter: RateLimiter = Depends(RateLimiter(times=5, minutes=10))
+):
+    if not freemium_service.check_batch_scan_limit(current_user, len(batch_data.profiles)):
+        raise HTTPException(status_code=403, detail="Batch scan limit reached")
+    
+    results = []
+    for profile in batch_data.profiles:
+        features = extract_features(profile.dict())
+        model = continuous_learner.current_model
+        
+        feature_list = [features[f] for f in model.feature_names_]
+        
+        prediction = model.predict([feature_list])[0]
+        probability = model.predict_proba([feature_list])[0][1]
+
+        analysis_result = {
+            "user_id": str(current_user.id),
+            "profile_url": profile.profile_url,
+            "result": "fake" if prediction == 1 else "genuine",
+            "confidence": float(probability),
+            "features": features,
+            "created_at": datetime.utcnow()
+        }
+
+        analyses_collection.insert_one(analysis_result)
+        logging_service.log_prediction(analysis_result["user_id"], analysis_result["profile_url"], analysis_result["result"], analysis_result["confidence"])
+        results.append(analysis_result)
+    
+    freemium_service.increment_batch_scan_count(current_user, len(batch_data.profiles))
+    
+    return results
+
+# Retrieving analysis results
+@v1_router.get("/analysis/results")
+async def get_analysis_results(
+    current_user: UserInDB = Depends(get_current_user),
+    limit: int = 10,
+    offset: int = 0
+):
+    results = list(analyses_collection.find(
+        {"user_id": str(current_user.id)},
+        {"_id": 0}
+    ).sort("created_at", -1).skip(offset).limit(limit))
+    
+    return results
+
+# Submitting feedback on analysis results
+@v1_router.post("/analysis/feedback")
+async def submit_feedback(
+    feedback: FeedbackSubmission,
+    current_user: UserInDB = Depends(get_current_user)
+):
+    analysis = analyses_collection.find_one({"_id": ObjectId(feedback.analysis_id)})
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    
+    if analysis["user_id"] != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized to submit feedback for this analysis")
+    
+    feedback_data = {
+        "user_id": str(current_user.id),
+        "analysis_id": feedback.analysis_id,
+        "feedback": feedback.feedback,
+        "created_at": datetime.utcnow()
+    }
+    
+    feedback_collection.insert_one(feedback_data)
+    continuous_learner.collect_feedback(feedback.analysis_id, feedback.feedback)
+    
+    return {"message": "Feedback submitted successfully"}
+
+# CRUD operations for Profiles
+@app.post("/api/profiles")
+async def create_profile(profile: ProfileSubmission, current_user: UserInDB = Depends(get_current_user)):
+    profile_data = profile.dict()
+    profile_data['user_id'] = ObjectId(current_user.id)
+    profile_data['created_at'] = datetime.utcnow()
+    profile_data['last_updated'] = datetime.utcnow()
+    result = profiles_collection.insert_one(profile_data)
+    return {"id": str(result.inserted_id)}
+
+@app.get("/api/profiles/{profile_id}")
+async def get_profile(profile_id: str, current_user: UserInDB = Depends(get_current_user)):
+    profile = profiles_collection.find_one({"_id": ObjectId(profile_id), "user_id": ObjectId(current_user.id)})
+    if profile:
+        profile['_id'] = str(profile['_id'])
+        return profile
+    raise HTTPException(status_code=404, detail="Profile not found")
+
+# CRUD operations for AnalysisResults
+@app.post("/api/analysis_results")
+async def create_analysis_result(result: AnalysisResultSubmission, current_user: UserInDB = Depends(get_current_user)):
+    result_data = result.dict()
+    result_data['user_id'] = ObjectId(current_user.id)
+    result_data['created_at'] = datetime.utcnow()
+    result = analysis_results_collection.insert_one(result_data)
+    return {"id": str(result.inserted_id)}
+
+@app.get("/api/analysis_results/{result_id}")
+async def get_analysis_result(result_id: str, current_user: UserInDB = Depends(get_current_user)):
+    result = analysis_results_collection.find_one({"_id": ObjectId(result_id), "user_id": ObjectId(current_user.id)})
+    if result:
+        result['_id'] = str(result['_id'])
+        return result
+    raise HTTPException(status_code=404, detail="Analysis result not found")
+
+# CRUD operations for FeedbackReports
+@app.post("/api/feedback_reports")
+async def create_feedback_report(feedback: FeedbackReportSubmission, current_user: UserInDB = Depends(get_current_user)):
+    feedback_data = feedback.dict()
+    feedback_data['user_id'] = ObjectId(current_user.id)
+    feedback_data['created_at'] = datetime.utcnow()
+    result = feedback_reports_collection.insert_one(feedback_data)
+    return {"id": str(result.inserted_id)}
+
+@app.get("/api/feedback_reports/{report_id}")
+async def get_feedback_report(report_id: str, current_user: UserInDB = Depends(get_current_user)):
+    report = feedback_reports_collection.find_one({"_id": ObjectId(report_id), "user_id": ObjectId(current_user.id)})
+    if report:
+        report['_id'] = str(report['_id'])
+        return report
+    raise HTTPException(status_code=404, detail="Feedback report not found")
+
+# Include the v1 router in the main app
+app.include_router(v1_router)
+
+@app.on_event("startup")
+async def startup_event():
+    start_background_jobs()
 
 if __name__ == "__main__":
     import uvicorn

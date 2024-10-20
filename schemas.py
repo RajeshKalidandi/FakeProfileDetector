@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 from datetime import datetime
 from bson import ObjectId
@@ -43,3 +43,32 @@ class UserSchema(BaseModel):
 
 class UserInDB(UserSchema):
     password_hash: str
+
+class ProfileSubmission(BaseModel):
+    platform: str
+    profile_url: str
+    username: str
+    bio: Optional[str]
+    post_count: int
+    follower_count: int
+    following_count: int
+    profile_picture_url: Optional[str]
+
+class BatchProfileSubmission(BaseModel):
+    profiles: List[ProfileSubmission]
+
+class FeedbackSubmission(BaseModel):
+    analysis_id: str
+    feedback: str
+
+class AnalysisResultSubmission(BaseModel):
+    profile_id: str
+    result: str
+    confidence: float
+    features_used: List[str]
+    model_version: str
+
+class FeedbackReportSubmission(BaseModel):
+    analysis_id: str
+    feedback: str
+    additional_comments: Optional[str]

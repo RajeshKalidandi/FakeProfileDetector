@@ -70,6 +70,10 @@ Fake Profile Detector is an advanced AI-powered web application designed to iden
   - Dashboard for monitoring system performance and model accuracy
   - Alerts for anomalies in model performance or system errors
 
+- Background Jobs
+  - Periodic data collection and feature extraction
+  - Scheduled model retraining and evaluation
+
 ## Tech Stack
 
 ### Frontend
@@ -99,7 +103,32 @@ Fake Profile Detector is an advanced AI-powered web application designed to iden
 
 ## Setup and Installation
 
-(Your existing setup instructions here)
+1. Clone the repository:   ```
+   git clone https://github.com/yourusername/FakeProfileDetector.git
+   cd FakeProfileDetector   ```
+
+2. Set up a virtual environment and install dependencies:   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+   pip install -r requirements.txt   ```
+
+3. Set up environment variables:
+   - Create a `.env` file in the root directory
+   - Add necessary environment variables (database URLs, API keys, etc.)
+
+4. Set up the database:   ```
+   python migrate_user_network_features.py   ```
+
+5. Train the models:   ```
+   python train_model.py   ```
+
+6. Start the backend server:   ```
+   uvicorn app:app --reload   ```
+
+7. In a new terminal, set up and start the frontend:   ```
+   cd src
+   npm install
+   npm run dev   ```
 
 ## Recent Updates
 
@@ -112,6 +141,7 @@ Fake Profile Detector is an advanced AI-powered web application designed to iden
 - Updated frontend to display new features and analysis results
 - Added comprehensive logging and monitoring system
 - Implemented alert system for anomalies and errors
+- Added background jobs for periodic data collection, feature extraction, and model retraining
 
 ## Contributing
 

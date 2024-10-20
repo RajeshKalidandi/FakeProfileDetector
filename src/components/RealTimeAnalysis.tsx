@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { analyzeProfileRealtime } from '../services/api';
+import { analyzeProfileRealtime, createAnalysisResult } from '../services/api';
 import AnalysisVisualization from './AnalysisVisualization';
 import FeedbackForm from './FeedbackForm';
 
@@ -15,6 +15,15 @@ const RealTimeAnalysis: React.FC = () => {
     try {
       const result = await analyzeProfileRealtime({ profile_url: profileUrl });
       setAnalysisResult(result);
+      
+      // Save the analysis result
+      await createAnalysisResult({
+        profile_id: result.profile_id,
+        result: result.result,
+        confidence: result.confidence,
+        features_used: result.features_used,
+        model_version: result.model_version,
+      });
     } catch (err) {
       setError('Failed to analyze profile. Please try again.');
       console.error(err);

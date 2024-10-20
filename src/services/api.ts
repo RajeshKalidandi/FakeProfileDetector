@@ -77,6 +77,25 @@ export const getRecentAnalyses = (): Promise<{ data: RecentAnalysis[] }> =>
 export const submitFeedback = (analysisId: string, feedback: string) =>
   api.post('/feedback', { analysis_id: analysisId, feedback });
 
+// New endpoints
+export const createProfile = (profileData: any) =>
+  api.post('/api/profiles', profileData);
+
+export const getProfile = (profileId: string) =>
+  api.get(`/api/profiles/${profileId}`);
+
+export const createAnalysisResult = (resultData: any) =>
+  api.post('/api/analysis_results', resultData);
+
+export const getAnalysisResult = (resultId: string) =>
+  api.get(`/api/analysis_results/${resultId}`);
+
+export const createFeedbackReport = (feedbackData: any) =>
+  api.post('/api/feedback_reports', feedbackData);
+
+export const getFeedbackReport = (reportId: string) =>
+  api.get(`/api/feedback_reports/${reportId}`);
+
 export default api;
 
 export interface UserStats {
@@ -104,5 +123,35 @@ export interface RecentAnalysis {
   profile_url: string;
   result: string;
   confidence: number;
+  created_at: string;
+}
+
+export interface Profile {
+  id: string;
+  platform: string;
+  profile_url: string;
+  username: string;
+  bio?: string;
+  post_count: number;
+  follower_count: number;
+  following_count: number;
+  profile_picture_url?: string;
+}
+
+export interface AnalysisResult {
+  id: string;
+  profile_id: string;
+  result: string;
+  confidence: number;
+  features_used: string[];
+  model_version: string;
+  created_at: string;
+}
+
+export interface FeedbackReport {
+  id: string;
+  analysis_id: string;
+  feedback: string;
+  additional_comments?: string;
   created_at: string;
 }

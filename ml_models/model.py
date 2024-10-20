@@ -55,3 +55,7 @@ class FakeProfileDetector:
     @classmethod
     def load_model(cls):
         return cls()
+
+    def retrain(self, X_train, y_train):
+        # Implement the retraining logic here
+        pass
