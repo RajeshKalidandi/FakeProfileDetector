@@ -11,7 +11,10 @@
 - [Usage](#usage)
 - [API Documentation](#api-documentation)
 - [ML Models](#ml-models)
+<<<<<<< HEAD
 - [Freemium Model](#freemium-model)
+=======
+>>>>>>> origin/main
 - [Contributing](#contributing)
 - [Troubleshooting](#troubleshooting)
 
@@ -51,8 +54,11 @@ Fake Profile Detector is an advanced system that leverages multiple machine lear
 
 ## Project Structure
 
+<<<<<<< HEAD
 The project follows a standard React application structure:
 
+=======
+>>>>>>> origin/main
 ```
 D:\FakeProfileDetector\
 ├── README.md
@@ -359,6 +365,7 @@ python -c "from pymongo import MongoClient; client = MongoClient('your_uri'); pr
 For additional support or feature requests, please open an issue in the GitHub repository or contact the development team.
 
 Last Updated: October 20, 2024
+<<<<<<< HEAD
 
 ## Freemium Model
 
@@ -370,3 +377,5 @@ Our Fake Profile Detector uses a freemium model to provide value to users while 
 No credit card required, unlimited access time
 
 ##### Core Features
+=======
+>>>>>>> origin/main
