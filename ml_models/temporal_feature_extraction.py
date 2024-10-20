@@ -1,6 +1,7 @@
+from typing import Dict, List, Any, Union
 from datetime import datetime
 
-def extract_temporal_features(user):
+def extract_temporal_features(user: Any) -> Dict[str, float]:
     account_age = user.get_account_age()
     posting_frequency = user.get_posting_frequency()
     activity_pattern = user.get_activity_pattern()

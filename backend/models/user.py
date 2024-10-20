@@ -1,11 +1,11 @@
-from pymongo import MongoClient
+from pymongo import MongoClient, ASCENDING
 from bson import ObjectId
 from datetime import datetime, timedelta
 import jwt
 import os
 from dotenv import load_dotenv
 from typing import Dict, List
-from sqlalchemy import Column, Integer, Float, String, JSON
+from sqlalchemy import Column, Integer, Float, String, JSON, DateTime, Index
 from sqlalchemy.ext.declarative import declarative_base
 
 load_dotenv()
@@ -22,27 +22,32 @@ class User(Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True)
-    username = Column(String)
-    email = Column(String)
+    username = Column(String, index=True)
+    email = Column(String, unique=True, index=True)
     password_hash = Column(String)
-    tier = Column(String)
+    tier = Column(String, index=True)
     daily_scans = Column(Integer)
     last_reset = Column(DateTime)
     contributions = Column(JSON)
     rewards = Column(JSON)
     followers_count = Column(Integer)
     following_count = Column(Integer)
-    connections = Column(JSON)  # Store connections as a JSON array
+    connections = Column(JSON)
     follower_following_ratio = Column(Float)
     degree_centrality = Column(Float)
     betweenness_centrality = Column(Float)
     closeness_centrality = Column(Float)
     clustering_coefficient = Column(Float)
     network_score = Column(Float)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     last_login = Column(DateTime)
     post_count = Column(Integer, default=0)
-    activity_times = Column(JSON)  # Store activity times as a JSON array
+    activity_times = Column(JSON)
+
+    # Create composite index for faster queries
+    __table_args__ = (
+        Index('idx_tier_daily_scans', 'tier', 'daily_scans'),
+    )
 
     def __init__(self, username: str, email: str, password_hash: str, tier: str = 'free', daily_scans: int = 0, last_reset: datetime = datetime.utcnow(), _id: ObjectId = None):
         self._id = _id or ObjectId()
@@ -212,3 +217,9 @@ class User(Base):
             hour = datetime.fromisoformat(activity_time).hour
             hour_counts[hour] += 1
         return hour_counts
+
+# Create indexes for MongoDB
+users_collection.create_index([("email", ASCENDING)], unique=True)
+users_collection.create_index([("username", ASCENDING)])
+users_collection.create_index([("tier", ASCENDING)])
+users_collection.create_index([("created_at", ASCENDING)])

@@ -3,6 +3,12 @@ from typing import List
 from ml_models.network_feature_extraction import extract_network_features
 from ml_models.temporal_feature_extraction import extract_temporal_features
 from pymongo import MongoClient
+from redis import Redis
+import pickle
+import json
+
+# Initialize Redis client
+redis_client = Redis(host='localhost', port=6379, db=1)
 
 def is_admin(user: User) -> bool:
     # Implement admin check logic
@@ -59,8 +65,14 @@ def update_user_network_features(user: User):
     user.save()
 
 def get_user_stats(user: User):
+    cache_key = f"user_stats:{user.id}"
+    cached_stats = redis_client.get(cache_key)
+    
+    if cached_stats:
+        return json.loads(cached_stats)
+    
     temporal_features = extract_temporal_features(user)
-    return {
+    stats = {
         "tier": user.tier,
         "daily_scans": user.daily_scans,
         "contributions": user.contributions,
@@ -76,11 +88,22 @@ def get_user_stats(user: User):
         "activity_variance": temporal_features['activity_variance'],
         "night_day_ratio": temporal_features['night_day_ratio'],
     }
+    
+    # Cache the stats for 5 minutes
+    redis_client.setex(cache_key, 300, json.dumps(stats))
+    
+    return stats
 
 async def get_recent_analyses(user_id: str, limit: int = 5) -> List[dict]:
-    analyses = db.analyses.find({"user_id": user_id}).sort("created_at", -1).limit(limit)
+    cache_key = f"recent_analyses:{user_id}"
+    cached_analyses = redis_client.get(cache_key)
     
-    return [
+    if cached_analyses:
+        return pickle.loads(cached_analyses)
+    
+    analyses = list(db.analyses.find({"user_id": user_id}).sort("created_at", -1).limit(limit))
+    
+    result = [
         {
             "profile_url": analysis["profile_url"],
             "result": analysis["result"],
@@ -89,3 +112,8 @@ async def get_recent_analyses(user_id: str, limit: int = 5) -> List[dict]:
         }
         for analysis in analyses
     ]
+    
+    # Cache the results for 1 minute
+    redis_client.setex(cache_key, 60, pickle.dumps(result))
+    
+    return result

@@ -1,3 +1,4 @@
+from typing import Dict, List, Any, Union
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from .text_feature_extraction import extract_profile_features
@@ -5,8 +6,8 @@ from .image_feature_extraction import analyze_multiple_images
 from .network_feature_extraction import extract_network_features
 from .temporal_feature_extraction import extract_temporal_features
 
-def extract_features(user_data):
-    features = {}
+def extract_features(user_data: Dict[str, Any]) -> Dict[str, Any]:
+    features: Dict[str, Any] = {}
     
     # Extract profile features
     profile_features = extract_profile_features(user_data)

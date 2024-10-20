@@ -24,6 +24,9 @@ import hashlib
 from redis import Redis
 from pymongo import MongoClient
 from datetime import datetime
+from ml_models.continuous_learning import continuous_learner
+import threading
+import asyncio
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -152,7 +155,7 @@ async def analyze_profile(
     profile_data['user'] = current_user
 
     features = extract_features(profile_data)
-    model = FakeProfileDetector.load_model('trained_model.joblib')
+    model = continuous_learner.current_model
     
     feature_list = [features[f] for f in model.feature_names_]
     
@@ -183,25 +186,10 @@ async def analyze_profile(
         "features": analysis_result["features"]
     }
 
-# Real-time profile analysis endpoint
-@app.post("/api/analyze/profile/realtime")
-async def analyze_profile_realtime(
-    profile_data: dict = Body(...),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    current_user: UserInDB = Depends(get_current_user)
-):
-    if not freemium_service.check_scan_limit(current_user):
-        raise HTTPException(status_code=403, detail="Daily scan limit reached")
-    
-    profile_key = generate_profile_key(profile_data)
-    
-    # Check if the analysis result is in cache
-    cached_result = redis_client.get(profile_key)
-    if cached_result:
-        return pickle.loads(cached_result)
-    
+# Asynchronous background task for profile analysis
+async def analyze_profile_background(profile_data: dict, current_user: UserInDB):
     features = extract_features(profile_data)
-    model = FakeProfileDetector.load_model('trained_model.joblib')
+    model = continuous_learner.current_model
     
     feature_list = [features[f] for f in model.feature_names_]
     
@@ -220,12 +208,32 @@ async def analyze_profile_realtime(
     # Store the analysis result in the analyses collection
     analyses_collection.insert_one(analysis_result)
     
-    # Update cache in the background
-    background_tasks.add_task(update_cache, profile_key, analysis_result)
+    # Update cache
+    profile_key = generate_profile_key(profile_data)
+    redis_client.setex(profile_key, 3600, pickle.dumps(analysis_result))  # Cache for 1 hour
     
     freemium_service.increment_scan_count(current_user)
+
+@app.post("/api/analyze/profile/realtime")
+async def analyze_profile_realtime(
+    profile_data: dict = Body(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: UserInDB = Depends(get_current_user)
+):
+    if not freemium_service.check_scan_limit(current_user):
+        raise HTTPException(status_code=403, detail="Daily scan limit reached")
     
-    return analysis_result
+    profile_key = generate_profile_key(profile_data)
+    
+    # Check if the analysis result is in cache
+    cached_result = redis_client.get(profile_key)
+    if cached_result:
+        return pickle.loads(cached_result)
+    
+    # Start asynchronous analysis
+    background_tasks.add_task(analyze_profile_background, profile_data, current_user)
+    
+    return {"message": "Analysis started. Results will be available shortly."}
 
 # User contribution endpoint
 @app.post("/api/contribute")
@@ -344,6 +352,34 @@ async def get_recent_analyses(current_user: UserInDB = Depends(get_current_user)
     recent_analyses = await user_service.get_recent_analyses(current_user.id, limit=5)
     return recent_analyses
 
+@app.post("/api/feedback")
+async def submit_feedback(analysis_id: str, feedback: str, current_user: UserInDB = Depends(get_current_user)):
+    continuous_learner.collect_feedback(analysis_id, feedback)
+    return {"message": "Feedback submitted successfully"}
+
+@app.post("/api/admin/retrain")
+async def retrain_model(current_user: UserInDB = Depends(get_current_user)):
+    if not user_service.is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    continuous_learner.retrain_model()
+    return {"message": "Model retraining initiated"}
+
+@app.post("/api/admin/ab-test")
+async def start_ab_test(test_duration_hours: int, current_user: UserInDB = Depends(get_current_user)):
+    if not user_service.is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Implement A/B testing logic here
+    # This could involve setting a flag in the database to use the new model for a subset of users
+    # and comparing performance metrics after the test duration
+    
+    return {"message": f"A/B test started for {test_duration_hours} hours"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# Add this at the end of the file
+retraining_thread = threading.Thread(target=continuous_learner.schedule_retraining)
+retraining_thread.start()

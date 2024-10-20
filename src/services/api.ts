@@ -74,6 +74,9 @@ export const analyzeProfileRealtime = (profileData: any) =>
 export const getRecentAnalyses = (): Promise<{ data: RecentAnalysis[] }> => 
   api.get('/recent-analyses');
 
+export const submitFeedback = (analysisId: string, feedback: string) =>
+  api.post('/feedback', { analysis_id: analysisId, feedback });
+
 export default api;
 
 export interface UserStats {

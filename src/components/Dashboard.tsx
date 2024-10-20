@@ -9,12 +9,12 @@ import HistoryReports from './HistoryReports';
 import Notifications from './Notifications';
 import ErrorMessage from './ErrorMessage';
 import RealTimeAnalysis from './RealTimeAnalysis';
-import { getUserStats, getRecentAnalyses } from '../services/api';
+import { getUserStats, getRecentAnalyses, UserStats, RecentAnalysis } from '../services/api';
 import { Link } from 'react-router-dom';
 
 const Dashboard: React.FC = () => {
   const { currentUser } = useAuth();
-  const [userStats, setUserStats] = useState({
+  const [userStats, setUserStats] = useState<UserStats>({
     tier: 'free',
     dailyScans: 0,
     contributions: {
@@ -35,7 +35,7 @@ const Dashboard: React.FC = () => {
     nightDayRatio: 0
   });
   const [error, setError] = useState<string | null>(null);
-  const [recentAnalyses, setRecentAnalyses] = useState([]);
+  const [recentAnalyses, setRecentAnalyses] = useState<RecentAnalysis[]>([]);
 
   useEffect(() => {
     const fetchUserStats = async () => {

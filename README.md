@@ -1,39 +1,89 @@
 # Fake Profile Detector
 
-Fake Profile Detector is an AI-powered web application that helps users identify and analyze potentially fake profiles on social media platforms. This project aims to provide a robust tool for verifying the authenticity of online profiles and protecting users from potential scams or fraudulent activities.
+Fake Profile Detector is an advanced AI-powered web application designed to identify and analyze potentially fake profiles on social media platforms. This project leverages cutting-edge machine learning techniques, network analysis, and temporal feature extraction to provide robust and accurate detection of fraudulent online profiles.
 
 ## Features
 
-- User authentication (Email/Password and Google Sign-In)
-- Dashboard with user statistics and recent analyses
-- Profile analysis using advanced AI algorithms
-- Contribution system for users to improve the detection model
-- Freemium model with daily scan limits
-- Admin panel for managing users and viewing overall statistics
-- Data collection from various social media platforms
-- Advanced text and image feature extraction for improved fake profile detection
+- User Authentication
+  - Email/Password and Google Sign-In
+  - JWT-based authentication
+
+- Dashboard
+  - User statistics and recent analyses
+  - Network and temporal feature visualizations
+
+- Profile Analysis
+  - Real-time analysis with caching mechanism
+  - Advanced feature extraction (text, image, network, temporal)
+  - Ensemble learning for improved accuracy
+
+- Machine Learning Models
+  - Support Vector Machine (SVM)
+  - Random Forest
+  - XGBoost
+  - LightGBM
+  - K-Nearest Neighbors (KNN)
+  - Logistic Regression
+  - Voting Classifier
+  - Stacking Classifier
+  - AdaBoost
+
+- Deep Learning Models
+  - Convolutional Neural Network (CNN) for image analysis
+  - Recurrent Neural Network (RNN) / LSTM for text sequence analysis
+  - Graph Neural Network (GNN) for network structure analysis
+  - Artificial Neural Network (ANN) for combined feature analysis
+
+- Contribution System
+  - User-driven model improvement
+  - Reward system for active contributors
+
+- Freemium Model
+  - Tiered access with daily scan limits
+
+- Admin Panel
+  - User management
+  - Global statistics and insights
+
+- Data Collection
+  - Multi-platform social media data scraping
+
+- Continuous Learning
+  - Feedback loop for model improvement
+  - Periodic model retraining
+  - A/B testing for model enhancements
+
+- Scalability and Performance
+  - Asynchronous processing for long-running tasks
+  - Database indexing for faster queries
+  - Caching mechanisms using Redis
+  - Prepared for load balancing
 
 ## Tech Stack
 
-### Frontend:
+### Frontend
 - React with TypeScript
 - Tailwind CSS for styling
 - Framer Motion for animations
 - React Router for navigation
-- Firebase Authentication
+- Chart.js for data visualization
 
-### Backend:
+### Backend
 - FastAPI (Python)
 - MongoDB for data storage
-- Firebase Admin SDK for authentication
-- Machine Learning models:
-  - Scikit-learn for traditional ML algorithms
-  - NLTK for NLP tasks
-  - Gensim for topic modeling
-  - TextBlob for spelling checks
-  - LanguageTool for grammar checks
-  - OpenCV for image processing
-  - Face Recognition for face detection
-  - TensorFlow/Keras for deep learning models
+- Redis for caching
+- Firebase Authentication
+- JWT for token-based authentication
+
+### Machine Learning
+- Scikit-learn for traditional ML algorithms
+- TensorFlow/Keras for deep learning models
+- PyTorch for GNN implementation
+- NLTK and Gensim for NLP tasks
+- OpenCV and Face Recognition for image processing
+
+### DevOps
+- Docker for containerization
+- GitHub Actions for CI/CD
 
 ## Project Structure

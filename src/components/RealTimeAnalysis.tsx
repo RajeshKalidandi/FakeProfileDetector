@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { analyzeProfileRealtime } from '../services/api';
 import AnalysisVisualization from './AnalysisVisualization';
+import FeedbackForm from './FeedbackForm';
 
 const RealTimeAnalysis: React.FC = () => {
   const [profileUrl, setProfileUrl] = useState('');
@@ -50,6 +51,7 @@ const RealTimeAnalysis: React.FC = () => {
             result={analysisResult.result}
             confidence={analysisResult.confidence}
           />
+          <FeedbackForm analysisId={analysisResult.id} />
         </div>
       )}
     </div>
