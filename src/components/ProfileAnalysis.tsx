@@ -5,6 +5,8 @@ import { Link, Globe, Upload, ChevronRight } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+import { FreemiumService } from '../lib/freemiumService';
+import { User } from '../lib/types';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -12,6 +14,19 @@ const ProfileAnalysis: React.FC = () => {
   const [step, setStep] = useState(1);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const { register, handleSubmit } = useForm();
+  const [user, setUser] = useState<User>(/* get user from context or props */);
+
+  const handleAnalysis = async () => {
+    const canScan = await FreemiumService.checkScanLimit(user);
+    if (!canScan) {
+      alert('Daily scan limit reached. Contribute to earn more scans!');
+      return;
+    }
+
+    // Perform analysis
+    await FreemiumService.incrementScanCount(user);
+    // Update UI to reflect new scan count
+  };
 
   const onSubmit = (data: any) => {
     setStep(2);
