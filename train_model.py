@@ -1,27 +1,43 @@
 import pandas as pd
-from ml_models import preprocess_data, train_model, extract_features
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, accuracy_score
+from ml_models.feature_extraction import extract_features
+from ml_models.preprocessing import preprocess_data
+import joblib
 
 # Load your dataset
-data = pd.read_csv('path_to_your_dataset.csv')
+# Assuming you have a CSV file with user data and labels
+data = pd.read_csv('user_data.csv')
 
-# Extract features for each profile in the dataset
+# Extract features
 features = []
+labels = []
+
 for _, row in data.iterrows():
-    profile_data = row.to_dict()
-    profile_data['profile_pictures'] = profile_data['profile_pictures'].split(',')  # Assuming comma-separated image paths
-    profile_features = extract_features(profile_data)
-    features.append(profile_features)
+    user_data = row.to_dict()
+    extracted_features = extract_features(user_data)
+    features.append(extracted_features)
+    labels.append(row['is_fake'])  # Assuming 'is_fake' is the label column
 
-features_df = pd.DataFrame(features)
-
-# Combine features with the original dataset
-combined_data = pd.concat([data, features_df], axis=1)
+# Convert features to DataFrame
+feature_df = pd.DataFrame(features)
 
 # Preprocess the data
-X_train, X_test, y_train, y_test, _ = preprocess_data(combined_data)
+X, y = preprocess_data(feature_df, labels)
+
+# Split the data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Train the model
-model = train_model(X_train, y_train, X_test, y_test)
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
 
-# Save the trained model
-model.save_model('trained_model.joblib')
+# Evaluate the model
+y_pred = model.predict(X_test)
+print(classification_report(y_test, y_pred))
+print(f"Accuracy: {accuracy_score(y_test, y_pred)}")
+
+# Save the model
+joblib.dump(model, 'trained_model.joblib')
+print("Model saved as 'trained_model.joblib'")

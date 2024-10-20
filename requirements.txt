@@ -18,3 +18,4 @@ nltk
 gensim
 textblob
 language-tool-python
+networkx==2.8.4

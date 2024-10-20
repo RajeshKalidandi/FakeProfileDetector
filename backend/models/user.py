@@ -5,6 +5,8 @@ import jwt
 import os
 from dotenv import load_dotenv
 from typing import Dict, List
+from sqlalchemy import Column, Integer, Float, String, JSON
+from sqlalchemy.ext.declarative import declarative_base
 
 load_dotenv()
 
@@ -14,7 +16,34 @@ users_collection = db['users']
 
 JWT_SECRET = os.getenv('JWT_SECRET')
 
-class User:
+Base = declarative_base()
+
+class User(Base):
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String)
+    email = Column(String)
+    password_hash = Column(String)
+    tier = Column(String)
+    daily_scans = Column(Integer)
+    last_reset = Column(DateTime)
+    contributions = Column(JSON)
+    rewards = Column(JSON)
+    followers_count = Column(Integer)
+    following_count = Column(Integer)
+    connections = Column(JSON)  # Store connections as a JSON array
+    follower_following_ratio = Column(Float)
+    degree_centrality = Column(Float)
+    betweenness_centrality = Column(Float)
+    closeness_centrality = Column(Float)
+    clustering_coefficient = Column(Float)
+    network_score = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime)
+    post_count = Column(Integer, default=0)
+    activity_times = Column(JSON)  # Store activity times as a JSON array
+
     def __init__(self, username: str, email: str, password_hash: str, tier: str = 'free', daily_scans: int = 0, last_reset: datetime = datetime.utcnow(), _id: ObjectId = None):
         self._id = _id or ObjectId()
         self.username = username
@@ -30,6 +59,19 @@ class User:
             'total_points': 0
         }
         self.rewards = []
+        self.followers_count = 0
+        self.following_count = 0
+        self.connections = []
+        self.follower_following_ratio = 0.0
+        self.degree_centrality = 0.0
+        self.betweenness_centrality = 0.0
+        self.closeness_centrality = 0.0
+        self.clustering_coefficient = 0.0
+        self.network_score = 0.0
+        self.created_at = datetime.utcnow()
+        self.last_login = None
+        self.post_count = 0
+        self.activity_times = []
 
     @property
     def id(self):
@@ -52,7 +94,19 @@ class User:
             "last_reset": self.last_reset,
             "contributions": self.contributions,
             "rewards": self.rewards,
-            "password_hash": self.password_hash
+            "followers_count": self.followers_count,
+            "following_count": self.following_count,
+            "connections": self.connections,
+            "follower_following_ratio": self.follower_following_ratio,
+            "degree_centrality": self.degree_centrality,
+            "betweenness_centrality": self.betweenness_centrality,
+            "closeness_centrality": self.closeness_centrality,
+            "clustering_coefficient": self.clustering_coefficient,
+            "network_score": self.network_score,
+            "created_at": self.created_at,
+            "last_login": self.last_login,
+            "post_count": self.post_count,
+            "activity_times": self.activity_times,
         }
 
     @classmethod
@@ -135,3 +189,26 @@ class User:
     @staticmethod
     def get_total_contributions() -> int:
         return sum(sum(user['contributions'].values()) for user in users_collection.find())
+
+    def update_login(self):
+        self.last_login = datetime.utcnow()
+        self.save()
+
+    def add_post(self):
+        self.post_count += 1
+        self.activity_times.append(datetime.utcnow().isoformat())
+        self.save()
+
+    def get_account_age(self):
+        return (datetime.utcnow() - self.created_at).days
+
+    def get_posting_frequency(self):
+        account_age_days = self.get_account_age()
+        return self.post_count / account_age_days if account_age_days > 0 else 0
+
+    def get_activity_pattern(self):
+        hour_counts = [0] * 24
+        for activity_time in self.activity_times:
+            hour = datetime.fromisoformat(activity_time).hour
+            hour_counts[hour] += 1
+        return hour_counts

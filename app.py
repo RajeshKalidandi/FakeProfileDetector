@@ -110,6 +110,15 @@ async def analyze_profile(
             temp_image_paths.append(temp_image_path)
         profile_data['profile_pictures'] = temp_image_paths
     
+    # Add network-related data to profile_data
+    profile_data['id'] = str(current_user.id)
+    profile_data['followers_count'] = current_user.followers_count
+    profile_data['following_count'] = current_user.following_count
+    profile_data['connections'] = current_user.connections
+
+    # Add temporal data to profile_data
+    profile_data['user'] = current_user
+
     features = extract_features(profile_data)
     model = FakeProfileDetector.load_model('trained_model.joblib')
     
@@ -144,12 +153,11 @@ async def get_user_stats(current_user: dict = Depends(get_current_user_credentia
     user = User.find_by_firebase_uid(firebase_uid)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {
-        "tier": user.tier,
-        "daily_scans": user.daily_scans,
-        "contributions": user.contributions,
-        "rewards": user.rewards
-    }
+    
+    # Update network features before returning stats
+    user_service.update_user_network_features(user)
+    
+    return user_service.get_user_stats(user)
 
 # Admin routes
 @app.get("/api/admin/users", response_model=List[UserSchema])

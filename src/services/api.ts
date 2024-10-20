@@ -45,8 +45,14 @@ export const getFeatureFlags = () =>
 export const analyzeProfile = (profileData: any) => 
   api.post('/analyze/profile', profileData);
 
-export const getUserStats = () =>
-  api.get('/user/stats');
+export const getUserStats = async (): Promise<{ data: UserStats }> => {
+  const response = await axios.get(`${API_URL}/user/stats`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('token')}`,
+    },
+  });
+  return response.data;
+};
 
 export const contributeData = (contributionData: any) =>
   api.post('/contribute', contributionData);
@@ -63,3 +69,24 @@ export const signInWithGoogle = async () => {
 };
 
 export default api;
+
+export interface UserStats {
+  tier: string;
+  dailyScans: number;
+  contributions: {
+    verifiedProfiles: number;
+    validReports: number;
+    feedbackCount: number;
+  };
+  rewards: any[];
+  networkScore: number;
+  followerFollowingRatio: number;
+  degreeCentrality: number;
+  betweennessCentrality: number;
+  closenessCentrality: number;
+  clusteringCoefficient: number;
+  accountAge: number;
+  postingFrequency: number;
+  activityVariance: number;
+  nightDayRatio: number;
+}
